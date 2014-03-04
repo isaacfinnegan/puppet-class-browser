@@ -1,0 +1,364 @@
+<html>
+<head>
+	<title>Puppet Browser</title>
+	<link rel="stylesheet" type="text/css" href="/extjs/resources/css/ext-all.css" />
+    <style>
+    	.dirty { background-color: #F5F6CE ;  }
+		.statusdisabled, .statusdisabled tr td  { color: #CCC; }
+		.pp-nagios-0, .statusOK { background-color: #00CC33; color: #FFF; text-align:center; }
+		table.status { border: 1px solid #CCC; padding: 1px; font-size: 8pt; }
+		table.status tr td a { font-size: 8pt; }
+		table.status tr, table.status td {height:8pt; line-height:8pt;
+	        padding: 1px 2px;
+	        text-overflow:ellipsis;
+	        overflow:hidden;
+	        white-space:nowrap;
+	        }
+		.statusEven {}
+		.pp-nagios-2 , .statusCritical{background-color: #FF0000; color: #FFF; text-align:center; }
+		.pp-nagios-1 , .statusWarning{background-color: #FFCC00; color: #FFF; text-align:center; }
+		.statusOdd {}
+		.pp-nagios-status {
+			height:30px;
+			font-size:8pt;	
+		}
+		.pp-nagios-label {width:100px;background-color:#BBB;height:30px;font-size:8pt;}
+		.pp-nagios-output {font-size:7pt;width:100%;}
+		.code {
+		   display:block;
+		   font: 1em 'Courier New', Courier, Fixed, monospace;
+		   font-size : 90%;
+		   color: #000;
+		   overflow : auto;
+		   text-align:left;
+		   //border : 1px solid #5581C0;
+		   padding : 0px 20px 0 30px;
+		   margin:1em 0 1em 0;
+		   line-height:17px;
+		   font-weight:normal!important;
+		}
+		#header{
+		   border:0 none;
+		   background:#1E4176 url(hd-bg.gif) repeat-x 0 0;
+		   padding-top:3px;
+		   padding-left:3px;
+		}
+		.docs-header .x-panel-body {
+		    background:transparent;
+		}
+		.classLink{
+			color: black;
+			text-decoration: underline;
+			cursor:pointer;
+		}
+		.icon-expand-all {
+		    background-image: url(expand-all.gif) !important;
+		}
+		.icon-collapse-all {
+		    background-image: url(collapse-all.gif) !important;
+		}
+		
+		.puppetclass {
+		    background-image: url(pkg.gif) !important;
+		}
+		
+    </style>
+</head>
+<body>
+<div id="loading-mask" style=""></div>
+  <div id="loading" > 
+  </div> 
+<script type="text/javascript" src="/extjs/adapter/ext/ext-base.js"></script>
+<script type="text/javascript" src="/extjs/ext-all-debug.js"></script>
+<script type="text/javascript" src="/extjs/SearchField.js"></script>
+
+<script>
+
+var websvn='';
+var classes=[];
+Ext.onReady(function(){
+
+
+	var p=new Ext.Viewport({
+		layout: 'border',
+		items:[
+			{
+				xtype: 'panel',
+				region: 'north',
+				id: 'header',
+				// title: 'north panel',
+				height: 30,
+				baseCls: 'docs-header',
+				bodyStyle:'padding:5px;color: #FFF;',
+				html: '<b>Puppet Class Browser</b>'
+			},
+			// {
+			// 	xtype: 'panel',
+			// 	region: 'south',
+			// 	title: 'south panel',
+			// 	height: 50,
+			// 	html: 'test <b>html</b>'
+			// },
+			{
+				id: 'classtree',
+				region: 'west',
+				layout:'fit',
+				xtype: 'treepanel',
+				width: 300,
+				useArrows: true,
+				autoScroll:true,
+				//containerScroll: true,
+				enableDD: false,
+				animate: false,
+				rootVisible: false,
+				root: {
+					text: 'Puppet Classes',
+					draggable: false,
+					id: 'root',
+					children:[],
+					nodeType: 'node'
+				},
+				tbar:[
+					new Ext.form.TextField({
+						width: 200,
+						emptyText:'Find a Class',
+						listeners:{
+							render: function(f){
+								f.el.on('keydown', filterTree, f, {buffer: 350});
+							}
+						}
+					}),
+					' ', 
+					{
+		                iconCls: 'icon-expand-all',
+						tooltip: 'Expand All',
+		                handler: function(){ Ext.getCmp('classtree').root.expandChildNodes(true); }
+		            }, '-', {
+		                iconCls: 'icon-collapse-all',
+		                tooltip: 'Collapse All',
+		                handler: function(){ Ext.getCmp('classtree').root.collapseChildNodes(true); }
+		            }
+					
+				]
+			},
+			{
+				xtype: 'panel',
+				tbar:[
+					'File: ',
+					{
+						id:'filepath',
+						text: ''
+					},
+					{
+						id: 'svnlink',
+						text: 'SVN Link',
+						handler: function(){
+							newWindow = window.open('http://' + websvn + '/websvn/wsvn/puppet/trunk/modules/production/' + Ext.getCmp('filepath').getText().replace('modules/','')); 
+							if (window.focus) newWindow.focus(); 
+						}
+					}
+				],
+				id:'classviewer',
+				region: 'center',
+				autoScroll:true,
+				bodyStyle: 'padding:10px'
+			}
+		]
+	});   // end Viewport setup
+	var filter = new Ext.tree.TreeFilter(Ext.getCmp('classtree'), {
+		clearBlank: true,
+		autoClear: true
+	});
+	var hiddenPkgs = [];
+	function filterTree(e){
+		var text = e.target.value;
+		Ext.each(hiddenPkgs, function(n){
+			n.ui.show();
+		});
+		if(!text){
+			filter.clear();
+			return;
+		}
+		Ext.getCmp('classtree').expandAll();
+
+		var re = new RegExp('' + Ext.escapeRe(text), 'i');
+		filter.filterBy(function(n){
+			// console.log('testing ' +n.text);
+			// console.log(re.test(n.text));
+			if(re.test(n.text))
+			{
+				return true;
+			}
+			if(!n.leaf)
+			{
+				if(n.findChildBy(function(nodetest){
+					return re.test(nodetest.text);
+				})==null)
+				{
+					return false;
+				}
+				else
+				{
+					return true;
+				}
+			}
+//			return !n.attributes.isClass || re.test(n.text);
+		});
+
+		// hide empty packages that weren't filtered
+		hiddenPkgs = [];
+		// Ext.getCmp('classtree').getRootNode().cascade(function(n){
+		// 	if(n.ui.ctNode.offsetHeight < 3){
+		// 		n.ui.hide();
+		// 		hiddenPkgs.push(n);
+		// 	}
+		// });
+	}
+
+	Ext.Ajax.request({
+		url: '/puppet/classes',
+		method: 'GET',
+		success: function(r,o){
+			loadClasses(r.responseText);
+		}
+	});
+	Ext.getCmp('classtree').on('click',loadClassFile);
+}); // end onReady
+function loadClassFile(node,e)
+{
+	if(	Ext.getCmp('filepath').getText()==node.attributes.file)
+	{
+		gotoClass(node.attributes.classname)			
+	}
+	else
+	{
+		Ext.getCmp('filepath').setText(node.attributes.file);
+		Ext.Ajax.request({
+			url:'/puppet/' + node.attributes.file,
+			classname: node.attributes.classname,
+			callback: function(o,s,r){
+				r.responseText='<pre>' + linkify_classes(r.responseText) + '</pre>';
+				Ext.getCmp('classviewer').body.update(r.responseText);
+				gotoClass(o.classname)
+			}
+
+		});			
+	}
+	
+}
+function gotoClass(id)
+{
+	var el = Ext.getDom(id);
+	var classpanel=Ext.getCmp('classviewer');
+	if(el){
+		var top = (Ext.fly(el).getOffsetsTo(classpanel.body)[1]) + classpanel.body.dom.scrollTop;
+		classpanel.body.scrollTo('top', top, {duration:.5, callback: function(){
+           Ext.fly(el).next('h2').pause(.05).highlight('#8DB2E3', {attr:'background-color'});
+        }});
+    }
+}
+
+function loadClasses(txt)
+{
+	var list=txt.split("\n");
+	Ext.each(list,function(i){
+		var segs=i.split('---');
+		if(segs.length<2)
+		{
+			return;
+		}
+		var classname=segs[0].split('::');
+		if(classname.length==1)
+		{
+			classes.push({iconCls:'puppetclass',text: classname[0],classname: segs[0],file:segs[1],leaf:true,children:[]});
+		}
+		else
+		{
+			var currentNode=classes[getChildIndex(classname[0],classes,segs[1],segs[0])];
+			if(classname.length > 2)
+			{
+				for(var i=1; i < classname.length-1; i++)
+				{
+					currentNode=currentNode.children[getChildIndex(classname[i],currentNode.children,segs[1])];
+				}
+			}
+			currentNode.leaf=false;
+			currentNode.children.push({iconCls:'puppetclass',text: classname[ classname.length-1 ], classname: segs[0], file:segs[1],leaf:true,children:[] }); //,id: segs[0]});
+							
+		}
+	});
+	Ext.getCmp('classtree').getRootNode().appendChild(classes);
+	Ext.getCmp('classtree').expandAll();
+	Ext.getCmp('classtree').collapseAll();
+}
+function getChildIndex(item,arr,file,fullname)
+{
+	var found=-1;
+	Ext.each(arr,function(i,idx){
+		if(i.text == item)
+		{
+			found=idx;
+			return false;
+		}
+	});
+	if(found==-1)
+	{
+		found=arr.push({iconCls:'puppetclass',text:item,file:file,leaf:true,children:[],classname:item}); //,id:fullname});
+		found--;;
+	}
+	return found;
+}
+
+function linkify_classes(text)
+{
+	if( !text ) return text;
+		
+	text = text.replace(/(class\s[:\w]+)/gi,function(classtxt){
+		segs = classtxt.split(' ');
+		return '<a class=classAnchor id="'+ segs[1] +'"></a><h2>' + classtxt + '</h2>';
+	});
+	text = text.replace(/((include|inherits)\s+[:\w\-0-9]+)/gi,function(classtxt){
+		segs = classtxt.split(' ');
+		return segs[0] + ' <a class=classLink onClick="lkupClass(\'' + segs[1] + '\')" rel="nofollow" >'+ segs[1] +'</a>';
+	});
+
+	return text;
+}
+function lkupClass(id)
+{
+	var tree=Ext.getCmp('classtree');
+	id=id.replace(/^::/,'');
+	var node=findChildRecursively(tree.getRootNode(),'classname',id);
+	if(node)
+	{
+		tree.expandPath(node.getPath());
+		node.select();
+		loadClassFile(node);
+	}
+}
+
+function findChildRecursively(tree,attribute, value) { 
+    var cs = tree.childNodes; 
+    for(var i = 0, len = cs.length; i < len; i++) { 
+        if(cs[i].attributes[attribute] == value){ 
+            return cs[i]; 
+        } 
+        else { 
+            // Find it in this tree 
+            if(found = findChildRecursively(cs[i], attribute, value)) { 
+                return found; 
+            } 
+        } 
+    } 
+    return null; 
+}
+</script>
+
+</body>
+</html>
+
+
+
+
+
+
