@@ -1,7 +1,7 @@
 <html>
 <head>
 	<title>Puppet Browser</title>
-	<link rel="stylesheet" type="text/css" href="/extjs/resources/css/ext-all.css" />
+	<link rel="stylesheet" type="text/css" href="extjs/resources/css/ext-all.css" />
     <style>
     	.dirty { background-color: #F5F6CE ;  }
 		.statusdisabled, .statusdisabled tr td  { color: #CCC; }
@@ -68,18 +68,25 @@
 <div id="loading-mask" style=""></div>
   <div id="loading" > 
   </div> 
-<script type="text/javascript" src="/extjs/adapter/ext/ext-base.js"></script>
-<script type="text/javascript" src="/extjs/ext-all-debug.js"></script>
-<script type="text/javascript" src="/extjs/SearchField.js"></script>
+<script type="text/javascript" src="extjs/ext-all-debug.js"></script>
 
 <script>
+Ext.Loader.setConfig({enabled: true});
+Ext.Loader.setPath('Ext.ux', 'ux');
+Ext.require([
+    'Ext.ux.form.SearchField'
+]);
 
 var websvn='';
 var classes=[];
 Ext.onReady(function(){
 
+	Ext.define('classnode',{
+		extend: 'Ext.data.Model',
+		fields: ['text','manifest','classname'],
+	});
 
-	var p=new Ext.Viewport({
+	var p=new Ext.container.Viewport({
 		layout: 'border',
 		items:[
 			{
@@ -108,26 +115,32 @@ Ext.onReady(function(){
 				useArrows: true,
 				autoScroll:true,
 				//containerScroll: true,
-				enableDD: false,
 				animate: false,
 				rootVisible: false,
+				store: {
+					xtype: 'tree',
+					proxy: { type: 'memory'},
+					model: 'classnode'
+				},
+				listeners: {
+					'select': loadClassFile
+				},
 				root: {
 					text: 'Puppet Classes',
-					draggable: false,
-					id: 'root',
-					children:[],
-					nodeType: 'node'
+					expanded: true,
+					id: 'root'
 				},
 				tbar:[
-					new Ext.form.TextField({
-						width: 200,
-						emptyText:'Find a Class',
-						listeners:{
-							render: function(f){
-								f.el.on('keydown', filterTree, f, {buffer: 350});
-							}
-						}
-					}),
+					// {
+					// 	xtype: 'triggerfield',
+					// 	width: 200,
+					// 	emptyText:'Find a Class',
+					// 	listeners:{
+					// 		render: function(f){
+					// 			f.el.on('keydown', filterTree, f, {buffer: 350});
+					// 		}
+					// 	}
+					// },
 					' ', 
 					{
 		                iconCls: 'icon-expand-all',
@@ -165,10 +178,10 @@ Ext.onReady(function(){
 			}
 		]
 	});   // end Viewport setup
-	var filter = new Ext.tree.TreeFilter(Ext.getCmp('classtree'), {
-		clearBlank: true,
-		autoClear: true
-	});
+	// var filter = new Ext.tree.TreeFilter(Ext.getCmp('classtree'), {
+	// 	clearBlank: true,
+	// 	autoClear: true
+	// });
 	var hiddenPkgs = [];
 	function filterTree(e){
 		var text = e.target.value;
@@ -176,34 +189,34 @@ Ext.onReady(function(){
 			n.ui.show();
 		});
 		if(!text){
-			filter.clear();
+			// filter.clear();
 			return;
 		}
 		Ext.getCmp('classtree').expandAll();
 
 		var re = new RegExp('' + Ext.escapeRe(text), 'i');
-		filter.filterBy(function(n){
-			// console.log('testing ' +n.text);
-			// console.log(re.test(n.text));
-			if(re.test(n.text))
-			{
-				return true;
-			}
-			if(!n.leaf)
-			{
-				if(n.findChildBy(function(nodetest){
-					return re.test(nodetest.text);
-				})==null)
-				{
-					return false;
-				}
-				else
-				{
-					return true;
-				}
-			}
-//			return !n.attributes.isClass || re.test(n.text);
-		});
+// 		filter.filterBy(function(n){
+// 			// console.log('testing ' +n.text);
+// 			// console.log(re.test(n.text));
+// 			if(re.test(n.text))
+// 			{
+// 				return true;
+// 			}
+// 			if(!n.leaf)
+// 			{
+// 				if(n.findChildBy(function(nodetest){
+// 					return re.test(nodetest.text);
+// 				})==null)
+// 				{
+// 					return false;
+// 				}
+// 				else
+// 				{
+// 					return true;
+// 				}
+// 			}
+// //			return !n.attributes.isClass || re.test(n.text);
+// 		});
 
 		// hide empty packages that weren't filtered
 		hiddenPkgs = [];
@@ -216,26 +229,25 @@ Ext.onReady(function(){
 	}
 
 	Ext.Ajax.request({
-		url: '/puppet/classes',
+		url: 'classes',
 		method: 'GET',
 		success: function(r,o){
 			loadClasses(r.responseText);
 		}
 	});
-	Ext.getCmp('classtree').on('click',loadClassFile);
 }); // end onReady
-function loadClassFile(node,e)
+function loadClassFile(tree,node,idx,e)
 {
-	if(	Ext.getCmp('filepath').getText()==node.attributes.file)
+	if(	Ext.getCmp('filepath').getText()==node.data.manifest)
 	{
-		gotoClass(node.attributes.classname)			
+		gotoClass(node.data.classname)			
 	}
 	else
 	{
-		Ext.getCmp('filepath').setText(node.attributes.file);
+		Ext.getCmp('filepath').setText(node.data.manifest);
 		Ext.Ajax.request({
-			url:'/puppet/' + node.attributes.file,
-			classname: node.attributes.classname,
+			url: node.data.manifest,
+			classname: node.data.classname,
 			callback: function(o,s,r){
 				r.responseText='<pre>' + linkify_classes(r.responseText) + '</pre>';
 				Ext.getCmp('classviewer').body.update(r.responseText);
@@ -253,7 +265,7 @@ function gotoClass(id)
 	if(el){
 		var top = (Ext.fly(el).getOffsetsTo(classpanel.body)[1]) + classpanel.body.dom.scrollTop;
 		classpanel.body.scrollTo('top', top, {duration:.5, callback: function(){
-           Ext.fly(el).next('h2').pause(.05).highlight('#8DB2E3', {attr:'background-color'});
+           Ext.fly(el).next('h4').highlight('8DB2E3', {duration: 1500,delay:100});
         }});
     }
 }
@@ -261,35 +273,36 @@ function gotoClass(id)
 function loadClasses(txt)
 {
 	var list=txt.split("\n");
-	Ext.each(list,function(i){
+	var classes=[];
+	for(var ll=0; ll < list.length; ll++)
+	{
+		var i = list[ll];
 		var segs=i.split('---');
-		if(segs.length<2)
+		if(segs.length<2 || list[ll].length==0)
 		{
 			return;
 		}
 		var classname=segs[0].split('::');
 		if(classname.length==1)
 		{
-			classes.push({iconCls:'puppetclass',text: classname[0],classname: segs[0],file:segs[1],leaf:true,children:[]});
+			classes.push({iconCls:'puppetclass',text: classname[0],classname: segs[0],manifest:segs[1],leaf:true,children:[]});
 		}
 		else
 		{
 			var currentNode=classes[getChildIndex(classname[0],classes,segs[1],segs[0])];
 			if(classname.length > 2)
 			{
-				for(var i=1; i < classname.length-1; i++)
+				for(var ii=1; ii < classname.length-1; ii++)
 				{
-					currentNode=currentNode.children[getChildIndex(classname[i],currentNode.children,segs[1])];
+					currentNode=currentNode.children[getChildIndex(classname[ii],currentNode.children,segs[1])];
 				}
 			}
 			currentNode.leaf=false;
-			currentNode.children.push({iconCls:'puppetclass',text: classname[ classname.length-1 ], classname: segs[0], file:segs[1],leaf:true,children:[] }); //,id: segs[0]});
+			currentNode.children.push({iconCls:'puppetclass',text: classname[ classname.length-1 ], classname: segs[0], manifest:segs[1],leaf:true,children:[] }); //,id: segs[0]});
 							
 		}
-	});
+	}
 	Ext.getCmp('classtree').getRootNode().appendChild(classes);
-	Ext.getCmp('classtree').expandAll();
-	Ext.getCmp('classtree').collapseAll();
 }
 function getChildIndex(item,arr,file,fullname)
 {
@@ -315,7 +328,7 @@ function linkify_classes(text)
 		
 	text = text.replace(/(class\s[:\w]+)/gi,function(classtxt){
 		segs = classtxt.split(' ');
-		return '<a class=classAnchor id="'+ segs[1] +'"></a><h2>' + classtxt + '</h2>';
+		return '<a class=classAnchor id="'+ segs[1] +'"></a><h4>' + classtxt + '</h4>';
 	});
 	text = text.replace(/((include|inherits)\s+[:\w\-0-9]+)/gi,function(classtxt){
 		segs = classtxt.split(' ');
@@ -331,16 +344,16 @@ function lkupClass(id)
 	var node=findChildRecursively(tree.getRootNode(),'classname',id);
 	if(node)
 	{
-		tree.expandPath(node.getPath());
-		node.select();
-		loadClassFile(node);
+		tree.selectPath(node.getPath('text'),'text');
+		// node.select();
+		// loadClassFile(node);
 	}
 }
 
 function findChildRecursively(tree,attribute, value) { 
     var cs = tree.childNodes; 
     for(var i = 0, len = cs.length; i < len; i++) { 
-        if(cs[i].attributes[attribute] == value){ 
+        if(cs[i].data[attribute] == value){ 
             return cs[i]; 
         } 
         else { 
