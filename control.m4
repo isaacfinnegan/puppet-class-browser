@@ -4,5 +4,5 @@ Architecture: all
 Section: Miscellaneous
 Priority: optional
 Maintainer: Evernote Operations <ops@evernote.com>
-Description: This package is the Evernote-specific puppet-class-browser build
+Description: This package is the puppet-class-browser web tool
 
