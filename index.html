@@ -73,6 +73,7 @@
 <script type="text/javascript" src="shCore.js"></script>
 <script type="text/javascript" src="shBrushPuppet.js"></script>
 <script type="text/javascript" src="extjs/ext-all-debug.js"></script>
+<script type="text/javascript" src="TreeFilter.js"></script>
 
 <script>
 Ext.Loader.setConfig({enabled: true});
@@ -122,6 +123,10 @@ Ext.onReady(function(){
 				//containerScroll: true,
 				animate: false,
 				rootVisible: false,
+				plugins: [{
+					ptype: 'treefilter',
+					allowParentFolders: true
+				}],
 				store: {
 					xtype: 'tree',
 					proxy: { type: 'memory'},
@@ -136,25 +141,32 @@ Ext.onReady(function(){
 					id: 'root'
 				},
 				tbar:[
-					// {
-					// 	xtype: 'triggerfield',
-					// 	width: 200,
-					// 	emptyText:'Find a Class',
-					// 	listeners:{
-					// 		render: function(f){
-					// 			f.el.on('keydown', filterTree, f, {buffer: 350});
-					// 		}
-					// 	}
-					// },
+					{
+						xtype: 'triggerfield',
+						width: 200,
+						triggerCls: 'x-form-clear-trigger',
+						emptyText:'Find a Class',
+						onTriggerClick: function () {
+			                this.reset();
+			                this.focus();
+			            },
+						listeners:{
+			                change: function (field, newVal) {
+			                    var tree = field.up('treepanel');
+			                    tree.filter(newVal);
+			                },
+			                buffer: 250
+						}
+					},
 					' ', 
 					{
 		                iconCls: 'icon-expand-all',
 						tooltip: 'Expand All',
-		                handler: function(){ Ext.getCmp('classtree').getRootNode().expandChildNodes(true); }
+		                handler: function(){ Ext.getCmp('classtree').getRootNode().expandChildren(true); }
 		            }, '-', {
 		                iconCls: 'icon-collapse-all',
 		                tooltip: 'Collapse All',
-		                handler: function(){ Ext.getCmp('classtree').getRootNode().collapseChildNodes(true); }
+		                handler: function(){ Ext.getCmp('classtree').getRootNode().collapseChildren(true); }
 		            }
 					
 				]
@@ -244,7 +256,7 @@ Ext.onReady(function(){
 }); // end onReady
 function loadClassFile(tree,node,idx,e)
 {
-	if(node.get('classname') == undefined)
+	if(node.get('classname') == undefined || node.get('classname') == "")
 	{
 		node.expand();
 		return false;
