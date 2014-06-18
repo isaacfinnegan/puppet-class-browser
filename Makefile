@@ -1,5 +1,5 @@
 NAME=puppet-class-browser
-VERSION=1.7.1
+VERSION=1.7.5
 RELEASE=2
 SOURCE=$(NAME)-$(VERSION).tar.gz
 EXES=

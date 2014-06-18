@@ -214,6 +214,17 @@ Ext.onReady(function(){
 		success: function(r,o){
 			class_data=Ext.decode(r.responseText);
 			loadClasses();
+			if(typeof window.location.search!=undefined && window.location.search.length)
+			{
+				Ext.each(window.location.search.replace(/\?/,'').split(/;|&/), function(i){
+					var term=i.split('=');
+					if(term[0] == 'class')
+					{
+						var tree=Ext.getCmp('classtree');
+						loadClassFile(Ext.getCmp('classtree'),tree.getRootNode().findChild('classname',term[1],true));
+					}
+				});;
+			}
 		}
 	});
 }); // end onReady
